@@ -1,0 +1,52 @@
+# Quality gate: 5 questions to the new version (header x-canary: eval), 4 correct = pass
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: quality-gate
+spec:
+  args:
+    - name: version
+  metrics:
+    - name: golden-questions
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              metadata:
+                labels:
+                  app: quality-gate
+                  version: "{{args.version}}"
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: test
+                    image: curlimages/curl:8.22.0
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        echo "Quality gate for release {{args.version}}"
+                        score=0
+
+                        check() {
+                          answer=$(curl -s http://agentgateway-proxy.agentgateway-system/v1/chat/completions \
+                            -H "content-type: application/json" \
+                            -H "x-canary: eval" \
+                            -d "{\"model\":\"assistant\",\"temperature\":0,\"messages\":[{\"role\":\"user\",\"content\":\"$1\"}]}" \
+                            | grep -o '"content":"[^"]*"')
+                          if echo "$answer" | grep -qi "$2"; then
+                            echo "OK     $1  $answer"
+                            score=$((score + 1))
+                          else
+                            echo "WRONG  $1  $answer"
+                          fi
+                        }
+
+                        check "What are the continents? Name all of them." "antarctica"
+                        check "What is 7 multiplied by 6? Answer with just the number." "42"
+                        check "Which planet is known as the Red Planet? Answer with one word." "mars"
+                        check "How many days are in a week? Answer with just the number." "7"
+                        check "What color do you get when you mix blue and yellow? Answer with one word." "green"
+
+                        echo "score: $score/5"
+                        [ "$score" -ge 4 ]

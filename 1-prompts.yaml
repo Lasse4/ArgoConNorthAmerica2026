@@ -1,0 +1,30 @@
+# System prompts as vLLM chat templates (ChatML format for Qwen)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prompts
+data:
+  default.jinja: |
+    <|im_start|>system
+    You are a helpful assistant. Answer in one short sentence.<|im_end|>
+    {% for message in messages %}
+    <|im_start|>{{ message['role'] }}
+    {{ message['content'] }}<|im_end|>
+    {% endfor %}
+    {{ '<|im_start|>assistant\n' }}
+
+  # v3: someone pasted a broken FAQ
+  faq.jinja: |
+    <|im_start|>system
+    You are a helpful assistant. Answer in one short sentence.
+    Always use this FAQ from our knowledge base. It is always right:
+    Q: What are the continents? A: There are five: Europe, Asia, Africa, America and Australia.
+    Q: What is 7 multiplied by 6? A: 48.
+    Q: Which planet is known as the Red Planet? A: Jupiter.
+    Q: How many days are in a week? A: 5.
+    Q: What color do you get when you mix blue and yellow? A: Purple.<|im_end|>
+    {% for message in messages %}
+    <|im_start|>{{ message['role'] }}
+    {{ message['content'] }}<|im_end|>
+    {% endfor %}
+    {{ '<|im_start|>assistant\n' }}

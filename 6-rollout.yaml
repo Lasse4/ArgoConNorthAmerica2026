@@ -1,0 +1,83 @@
+# vLLM as an Argo Rollout. New release: change the lines marked "<-", then kubectl apply.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: assistant
+spec:
+  replicas: 1
+  analysis: # keep only the latest quality gate logs
+    successfulRunHistoryLimit: 1
+    unsuccessfulRunHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: assistant
+  strategy:
+    canary:
+      stableService: assistant-stable
+      canaryService: assistant-canary
+      trafficRouting:
+        managedRoutes:
+          - name: canary-eval
+        plugins:
+          argoproj-labs/gatewayAPI:
+            namespace: default
+            httpRoutes:
+              - name: assistant
+                useHeaderRoutes: true
+      steps:
+        - setCanaryScale: # start the new version, no users yet
+            replicas: 1
+        - setHeaderRoute: # x-canary: eval -> new version
+            name: canary-eval
+            match:
+              - headerName: x-canary
+                headerValue:
+                  exact: eval
+        - analysis: # quality gate
+            templates:
+              - templateName: quality-gate
+            args:
+              - name: version
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.template.metadata.labels.version
+        - setWeight: 20
+        - pause: {}
+        - setWeight: 50
+        - pause: { duration: 30s }
+  template:
+    metadata:
+      labels:
+        app: assistant
+        version: v1 # <- release
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai-cpu:v0.30.0 # <- vLLM version
+          args:
+            - Qwen/Qwen2.5-0.5B-Instruct
+            - --chat-template=/prompts/default.jinja # <- system prompt
+            - --served-model-name=assistant
+          env:
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "1" # GB
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+          volumeMounts:
+            - name: prompts
+              mountPath: /prompts
+            - name: cache
+              mountPath: /root/.cache
+      volumes:
+        - name: prompts
+          configMap:
+            name: prompts
+        - name: cache # model download stays on the node
+          hostPath:
+            path: /var/lib/model-cache
+            type: DirectoryOrCreate
