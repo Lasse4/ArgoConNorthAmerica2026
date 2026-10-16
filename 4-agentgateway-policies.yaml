@@ -1,0 +1,50 @@
+# agentgateway policies in CEL, on a plain Service
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: assistant
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: assistant
+  traffic:
+    # guardrail: prompt injection or card number -> 403
+    authorization:
+      action: Require
+      policy:
+        matchExpressions:
+          - '!json(request.body).messages.exists(m, m.content.matches("(?i)ignore (all )?previous instructions"))'
+          - '!json(request.body).messages.exists(m, m.content.matches("\\d{4}[ -]?\\d{4}[ -]?\\d{4}[ -]?\\d{4}"))'
+    # who answered, how many tokens
+    transformation:
+      response:
+        set:
+          - name: x-served-by
+            value: backend.name
+          - name: x-total-tokens
+            value: string(json(response.body).usage.total_tokens)
+---
+# access log with prompt, answer and tokens
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: llm-access-log
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agentgateway-proxy
+  frontend:
+    accessLog:
+      attributes:
+        add:
+          - name: backend
+            expression: backend.name
+          - name: prompt
+            expression: json(request.body).messages[0].content
+          - name: answer
+            expression: json(response.body).choices[0].message.content
+          - name: tokens
+            expression: json(response.body).usage.total_tokens

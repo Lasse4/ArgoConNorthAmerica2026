@@ -1,0 +1,23 @@
+# Argo Rollouts changes the weights
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: assistant
+spec:
+  parentRefs:
+    - name: agentgateway-proxy
+      namespace: agentgateway-system
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+      timeouts:
+        request: 120s
+      backendRefs:
+        - name: assistant-stable
+          port: 8000
+          weight: 100
+        - name: assistant-canary
+          port: 8000
+          weight: 0
