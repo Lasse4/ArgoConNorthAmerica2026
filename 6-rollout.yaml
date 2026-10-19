@@ -73,7 +73,13 @@ spec:
               mountPath: /prompts
             - name: cache
               mountPath: /root/.cache
+            - name: shm
+              mountPath: /dev/shm
       volumes:
+        - name: shm # vLLM needs more than the default 64 MiB
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
         - name: prompts
           configMap:
             name: prompts
