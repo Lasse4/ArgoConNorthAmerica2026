@@ -53,6 +53,8 @@ docker exec argocon-control-plane crictl pull docker.io/curlimages/curl:8.22.0
 
 - `0-platform.yaml` uses the plugin for Apple Silicon (`linux-arm64`). On Intel/AMD use `linux-amd64`.
   A warning about `last-applied-configuration` for that ConfigMap is harmless.
+- Windows (WSL2) and other Intel/AMD machines: in `0-platform.yaml` change the plugin URL from
+  `gatewayapi-plugin-linux-arm64` to `gatewayapi-plugin-linux-amd64` before `kubectl apply -f 0-platform.yaml`.
 - On its first start vLLM downloads the model from Hugging Face (about 1 GB) to
   `/var/lib/model-cache` on the kind node. Run the demo once before the talk.
 
