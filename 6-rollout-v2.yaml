@@ -1,11 +1,10 @@
-# vLLM as an Argo Rollout. New release: change the lines marked "<-", then kubectl apply.
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
   name: assistant
 spec:
   replicas: 1
-  analysis: # keep only the latest quality gate logs
+  analysis:
     successfulRunHistoryLimit: 1
     unsuccessfulRunHistoryLimit: 1
   selector:
@@ -25,15 +24,15 @@ spec:
               - name: assistant
                 useHeaderRoutes: true
       steps:
-        - setCanaryScale: # start the new version, no users yet
+        - setCanaryScale:
             replicas: 1
-        - setHeaderRoute: # x-canary: eval -> new version
+        - setHeaderRoute:
             name: canary-eval
             match:
               - headerName: x-canary
                 headerValue:
                   exact: eval
-        - analysis: # quality gate
+        - analysis:
             templates:
               - templateName: quality-gate
             args:
@@ -44,23 +43,38 @@ spec:
         - setWeight: 20
         - pause: {}
         - setWeight: 50
-        - pause: { duration: 30s }
+        - pause: { duration: 15s }
   template:
     metadata:
       labels:
         app: assistant
-        version: v1 # <- release
+        version: v2 # <- v2: was v1
     spec:
       containers:
         - name: vllm
-          image: vllm/vllm-openai-cpu:v0.30.0 # <- vLLM version
+          image: vllm/vllm-openai-cpu:v0.31.0 # <- v2: new vLLM image, was v0.30.0
           args:
             - Qwen/Qwen2.5-0.5B-Instruct
-            - --chat-template=/prompts/default.jinja # <- system prompt
+            - --chat-template=/prompts/default.jinja
             - --served-model-name=assistant
+            - --dtype=float16
+            - --max-model-len=2048
+            - --max-num-batched-tokens=2048
+            - --max-num-seqs=4
           env:
             - name: VLLM_CPU_KVCACHE_SPACE
-              value: "1" # GB
+              value: "1"
+            - name: VLLM_CPU_OMP_THREADS_BIND
+              value: nobind
+            - name: OMP_NUM_THREADS
+              value: "4"
+            - name: OMP_WAIT_POLICY
+              value: PASSIVE
+            - name: HF_HUB_OFFLINE
+              value: "1"
+          resources:
+            limits:
+              cpu: "4"
           ports:
             - containerPort: 8000
           readinessProbe:
@@ -76,14 +90,14 @@ spec:
             - name: shm
               mountPath: /dev/shm
       volumes:
-        - name: shm # vLLM needs more than the default 64 MiB
+        - name: shm
           emptyDir:
             medium: Memory
             sizeLimit: 1Gi
         - name: prompts
           configMap:
             name: prompts
-        - name: cache # model download stays on the node
+        - name: cache
           hostPath:
             path: /var/lib/model-cache
             type: DirectoryOrCreate

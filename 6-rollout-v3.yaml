@@ -1,0 +1,103 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: assistant
+spec:
+  replicas: 1
+  analysis:
+    successfulRunHistoryLimit: 1
+    unsuccessfulRunHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: assistant
+  strategy:
+    canary:
+      stableService: assistant-stable
+      canaryService: assistant-canary
+      trafficRouting:
+        managedRoutes:
+          - name: canary-eval
+        plugins:
+          argoproj-labs/gatewayAPI:
+            namespace: default
+            httpRoutes:
+              - name: assistant
+                useHeaderRoutes: true
+      steps:
+        - setCanaryScale:
+            replicas: 1
+        - setHeaderRoute:
+            name: canary-eval
+            match:
+              - headerName: x-canary
+                headerValue:
+                  exact: eval
+        - analysis:
+            templates:
+              - templateName: quality-gate
+            args:
+              - name: version
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.template.metadata.labels.version
+        - setWeight: 20
+        - pause: {}
+        - setWeight: 50
+        - pause: { duration: 15s }
+  template:
+    metadata:
+      labels:
+        app: assistant
+        version: v3 # <- v3: was v2
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai-cpu:v0.31.0
+          args:
+            - Qwen/Qwen2.5-0.5B-Instruct
+            - --chat-template=/prompts/with-faq.jinja # <- v3: new system prompt, was default.jinja
+            - --served-model-name=assistant
+            - --dtype=float16
+            - --max-model-len=2048
+            - --max-num-batched-tokens=2048
+            - --max-num-seqs=4
+          env:
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "1"
+            - name: VLLM_CPU_OMP_THREADS_BIND
+              value: nobind
+            - name: OMP_NUM_THREADS
+              value: "4"
+            - name: OMP_WAIT_POLICY
+              value: PASSIVE
+            - name: HF_HUB_OFFLINE
+              value: "1"
+          resources:
+            limits:
+              cpu: "4"
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+          volumeMounts:
+            - name: prompts
+              mountPath: /prompts
+            - name: cache
+              mountPath: /root/.cache
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: prompts
+          configMap:
+            name: prompts
+        - name: cache
+          hostPath:
+            path: /var/lib/model-cache
+            type: DirectoryOrCreate

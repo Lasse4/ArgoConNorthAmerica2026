@@ -1,4 +1,3 @@
-# agentgateway policies in CEL, on a plain Service
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
@@ -9,14 +8,12 @@ spec:
       kind: HTTPRoute
       name: assistant
   traffic:
-    # guardrail: prompt injection or card number -> 403
     authorization:
       action: Require
       policy:
         matchExpressions:
           - '!json(request.body).messages.exists(m, m.content.matches("(?i)ignore (all )?previous instructions"))'
           - '!json(request.body).messages.exists(m, m.content.matches("\\d{4}[ -]?\\d{4}[ -]?\\d{4}[ -]?\\d{4}"))'
-    # who answered, how many tokens
     transformation:
       response:
         set:
@@ -25,7 +22,6 @@ spec:
           - name: x-total-tokens
             value: string(json(response.body).usage.total_tokens)
 ---
-# access log with prompt, answer and tokens
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
