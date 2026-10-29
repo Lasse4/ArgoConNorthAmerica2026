@@ -28,5 +28,6 @@ while true; do
     else
       echo "$backend ($tokens tokens)  $question -> $answer"
     fi
+    sleep 0.2
   done
 done

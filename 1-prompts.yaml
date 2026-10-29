@@ -1,4 +1,3 @@
-# System prompts as vLLM chat templates (ChatML format for Qwen)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,8 +12,7 @@ data:
     {% endfor %}
     {{ '<|im_start|>assistant\n' }}
 
-  # v3: someone pasted a broken FAQ
-  faq.jinja: |
+  with-faq.jinja: |
     <|im_start|>system
     You are a helpful assistant. Answer in one short sentence.
     Always use this FAQ from our knowledge base. It is always right:

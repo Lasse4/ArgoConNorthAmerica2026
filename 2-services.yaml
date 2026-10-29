@@ -1,4 +1,3 @@
-# Argo Rollouts points these at the stable and the canary pods
 apiVersion: v1
 kind: Service
 metadata:
